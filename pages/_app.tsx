@@ -1,14 +1,27 @@
-import { ThemeProvider } from 'next-themes';
-import type { AppProps } from 'next/app';
-import React from 'react';
-import '../styles/globals.css';
+import 'nextra-theme-blog/style.css'
+import type { AppProps } from 'next/app'
+import Head from 'next/head'
+import '../styles/main.css'
 
-const MyApp = ({ Component, pageProps }: AppProps): JSX.Element => {
+export default function App({ Component, pageProps }: AppProps) {
   return (
-    <ThemeProvider attribute="class" enableSystem={false} defaultTheme="dark">
+    <>
+      <Head>
+        <link
+          rel="alternate"
+          type="application/rss+xml"
+          title="RSS"
+          href="/feed.xml"
+        />
+        <link
+          rel="preload"
+          href="/fonts/Inter-roman.latin.var.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+      </Head>
       <Component {...pageProps} />
-    </ThemeProvider>
-  );
-};
-
-export default MyApp;
+    </>
+  )
+}

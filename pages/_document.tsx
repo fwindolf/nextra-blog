@@ -1,17 +1,31 @@
-import Document, { Head, Html, Main, NextScript } from 'next/document';
+import { Html, Head, Main, NextScript } from 'next/document'
 
-class MyDocument extends Document {
-  render(): JSX.Element {
-    return (
-      <Html lang="en">
-        <Head />
-        <body className="bg-white dark:bg-black text-gray-900 dark:text-white">
-          <Main />
-          <NextScript />
-        </body>
-      </Html>
-    );
+export default function Document() {
+  const meta = {
+    title: 'Fleek Demos Blog',
+    description: 'A blog the keep record of the Fleek Platform Demos.',
+    image: 'https://assets.vercel.com/image/upload/q_auto/front/vercel/dps.png',
   }
-}
 
-export default MyDocument;
+  return (
+    <Html lang="en">
+      <Head>
+        <meta name="robots" content="follow, index" />
+        <meta name="description" content={meta.description} />
+        <meta property="og:site_name" content={meta.title} />
+        <meta property="og:description" content={meta.description} />
+        <meta property="og:title" content={meta.title} />
+        <meta property="og:image" content={meta.image} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:site" content="@yourname" />
+        <meta name="twitter:title" content={meta.title} />
+        <meta name="twitter:description" content={meta.description} />
+        <meta name="twitter:image" content={meta.image} />
+      </Head>
+      <body>
+        <Main />
+        <NextScript />
+      </body>
+    </Html>
+  )
+}
