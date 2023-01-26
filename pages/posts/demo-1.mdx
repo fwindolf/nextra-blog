@@ -5,3 +5,71 @@ description: Pin your firs files on the new Fleek IPFS pinning beta.
 tag: IPFS
 author: You
 ---
+
+## What is pinning?
+
+Pinning is the mechanism that allows you to tell IPFS to store and keep a given object somewhere — the default being your local node, though in this case you will be pinning the object to the Fleek's IPFS Node.
+
+## Download CLI
+
+This package requires Node.js 16 at a minimum. To install the CLI run
+
+``` bash copy
+npm install -g @fleekxyz/cli
+```
+
+## Authentication
+
+All the services in the Fleek CLI require authentication, to do this you have to run:
+
+```bash copy
+$ fleek login
+```
+This will trigger the login process, we use Web3Auth to manage authentication. Once the flow is completed you will be greeted like this:
+
+```bash copy
+$ fleek login
+🔗 Opening browser on https://rough-truth-3196.on.fleek.xyz/login.html?verificationSession=... 
+🧑‍💻 Please login to continue
+✅ Successfully logged in.
+```
+
+## Projects
+
+To interact with services you need to have a project. This can be created and managed via the CLI too! But dont worry the CLI wont let you continue without a project on the actions that require it.
+
+To create a project you can do it like this:
+
+```bash copy
+$ fleek projects create
+$ ? Enter project name: › 
+```
+
+When entered a correct name, you will be automatically switched to it. Also you can switch through the different projects usign the 'switch' command that will promt a selector:
+
+```bash copy
+$ fleek projects switch
+❯   project-1
+    project-2
+    project-3
+```
+
+## Pinning
+
+We can use Fleek's IPFS pinning service to pin files to the decentralized network. This will ensure that the files are accessible, no matter where they are stored, as long as they are stored in the IPFS network.
+
+```bash copy
+$ fleek ipfs add hola.txt
+WARN! Fleek CLI is in beta phase, use it under your own responsibility
+> Success! QmRG4xcsmoZuXqKuPz3uVBgvo3GZ6k1kLZWhmvzuKtDr9s
+
+> You can visit through the gateway:
+https://ipfs.io/ipfs/QmRG4xcsmoZuXqKuPz3uVBgvo3GZ6k1kLZWhmvzuKtDr9s
+```
+
+You can use the IPFS public gateways to check your uploaded files
+
+import Link from 'next/link'
+
+<Link href='https://ipfs.io/ipfs/QmRG4xcsmoZuXqKuPz3uVBgvo3GZ6k1kLZWhmvzuKtDr9s'> Here</Link>
+
