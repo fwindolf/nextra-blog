@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/fleekxyz/templates/main/.github/coverImage.png?token=GHSAT0AAAAAABOKGXBQU6IXFNDB3V5KJ2OOY6UAYJQ" height="450" title="Fleek.xyz" alt="fleek-xyz logo">
+  <img src="https://raw.githubusercontent.com/fleekxyz/fleek-demos-blog/f3ceabbd16af559fed4527299142a4b5c4ce8bd7/.github/nextra-blog.png" height="450" title="Fleek.xyz" alt="fleek-xyz logo">
 </p>
 
 # Fleek Demos Blog
