@@ -39,7 +39,7 @@ It will prompt you for the following inputs:
 
 After running this you'll be able to deploy the site using Fleek CLI
 
-#### Deploy using Fleek CLI
+### Deploy using Fleek CLI
 After configuring the `fleek.json` file using Fleek's CLI you can go ahead and deploy your site by running:
 ```
 fleek sites deploy
