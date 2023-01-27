@@ -4,7 +4,7 @@ export default function Document() {
   const meta = {
     title: 'Fleek Demos Blog',
     description: 'A blog the keep record of the Fleek Platform Demos.',
-    image: 'https://assets.vercel.com/image/upload/q_auto/front/vercel/dps.png',
+    image: '/images/fleekCover.png',
   }
 
   return (
