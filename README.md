@@ -45,6 +45,13 @@ After configuring the `fleek.json` file using Fleek's CLI you can go ahead and d
 fleek sites deploy
 ```
 
+Then it will output a message that contains you IPFS CID
+```
+Export successful. Files written to fleek-demos-blog/out
+ 
+> Success! Deployed! IPFS CID: Qmb2psuVMkGfSdH3egfLEHc2di5VKtDVdTqtB8wqFNbK2h
+```
+
 ## Contributing
 
 Contributions are always welcome!
