@@ -1,6 +1,6 @@
 {
-  "id": "cldagrcby0000jr08c3i3z50e",
-  "name": "site-test",
+  "id": "clephoohs0000l5082ru1ful2",
+  "name": "fleek-demos-blog-2",
   "distDir": "out",
   "buildCommand": "npm run build"
 }
