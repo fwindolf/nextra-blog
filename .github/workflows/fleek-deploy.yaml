@@ -14,7 +14,7 @@ jobs:
         with:
           node-version: 16
       - name: Install Fleek CLI
-        run: npm i -g @fleekxyz/cli
+        run: npm i -g @fleekxyz/cli@0.2.0-rc.2
       - name: Install Packages
         run: npm install
       - name: Build & deploy sites
