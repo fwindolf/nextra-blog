@@ -1,67 +1,87 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/fleekxyz/fleek-demos-blog/f3ceabbd16af559fed4527299142a4b5c4ce8bd7/.github/nextra-blog.png" height="450" title="Fleek.xyz" alt="fleek-xyz logo">
-</p>
+# Nextra Blog + Fleek Starter Kit
 
-# Fleek Demos Blog
+![Preview](./.github/preview.png)
 
-This repo is part of [fleekxyz/templates](https://github.com/fleekxyz/templates) a collection of Collection of Boileplates & examples configured to easily deploy to Fleek.xyz with the pre-configured scrips.
+## 🚀 Project Structure
 
-## Getting started
+Inside of your Nextra project, you'll see the following folders and files:
 
-Here is a summary of the available scripts and a description.
-
-### Install dependencies
 ```
-yarn
-```
-
-### Start development mode
-This will start a server on http://localhost:3000 where you can check the changes made to the content.
-```
-yarn dev
-```
-
-### Build your site
-This will use `next build & next export` creating a directory called `out` which contains the site that will be uploaded
-```
-yarn build
+/
+├── pages/
+│   ├── posts/
+│   │   └── post.mdx
+│   ├── _app.tsx
+│   ├── index.tsx
+│   └── _document.tsx
+├── public/
+│   └── favicon.svg
+├── styles/
+└── package.json
 ```
 
-### Configure `fleek.json` using Fleek's CLI
-You can configure this site using Fleek's CLI, to get started run:
-```
-fleek sites init
-```
-It will prompt you for the following inputs:
-1. Site name: You can go ahead and create a new site
-2. Specify dist directory: Use `out` which contains the site exported by next
-3. Build command: You can specify the build command so fleek cli can build & deploy the site for you, you can use `npm run build`
+## 🧞 Commands
 
-After running this you'll be able to deploy the site using Fleek CLI
+All commands are run from the root of the project, from a terminal:
 
-### Deploy using Fleek CLI
-After configuring the `fleek.json` file using Fleek's CLI you can go ahead and deploy your site by running:
+| Command                | Action                                           |
+| :--------------------- | :----------------------------------------------- |
+| `pnpm install`          | Installs dependencies                            |
+| `pnpm run dev`          | Starts local dev server at `localhost:3000`      |
+| `pnpm run build`        | Build your production site to `./out/`          |
+| `pnpm run start`        | Preview your build locally, before deploying     |
+
+## ⚡ How to deploy to Fleek
+
+### 1. Create a `fleek.json` config file:
+You can configure this site deployment using [Fleek CLI]() and running:
+```
+ > fleek sites init
+   WARN! Fleek CLI is in beta phase, use it under your own responsibility
+   ? Choose one of the existing sites or create a new one. › 
+   ❯ Create a new site
+```
+
+It will prompt you for a `name`, `dist` directory location & `build command`
+
+- `name`: How you want to name the site
+- `dist`: The output directory where the site is located, for this template it's `./out`
+- `build command`: Command to build your site, this will be used to deploy the latest version either by CLI or Github Actions
+
+### 2. Deploy the site
+After configuiring your `fleek.json` file, you can deployt the site by running
+
 ```
 fleek sites deploy
 ```
-
-Then it will output a message that contains you IPFS CID
+After running it you will get an output like this:
 ```
-Export successful. Files written to fleek-demos-blog/out
- 
-> Success! Deployed! IPFS CID: Qmb2psuVMkGfSdH3egfLEHc2di5VKtDVdTqtB8wqFNbK2h
+ WARN! Fleek CLI is in beta, use it at your own discretion
+   > Success! Deployed!
+   > Site IPFS CID: QmP1nDyoHqSrRabwUSrxRV3DJqiKH7b9t1tpLcr1NTkm1M
+
+   > You can visit through the gateway:
+   > https://ipfs.io/ipfs/QmP1nDyoHqSrRabwUSrxRV3DJqiKH7b9t1tpLcr1NTkm1M
 ```
 
-## Contributing
+### Extra features
+- **Continuous Integration (CI):** `fleek sites ci` [Documentation.](https://docs.fleek.xyz/services/sites/#continuous-integration-ci)
+- **Adding custom domains:** `fleek domains create` [Documentation.](https://docs.fleek.xyz/services/domains/)
 
-Contributions are always welcome!
 
-Please refer to each project's style and contribution guidelines for submitting patches and additions. In general, we follow the "fork-and-pull" Git workflow.
+### Keep in mind:
 
-1. Fork the repo on GitHub
-2. Clone the project to your own machine
-3. Commit changes to your own branch
-4. Push your work back up to your fork
-5. Submit a Pull request so that we can review your changes
+This template has been configured to produce a static output.
 
-> NOTE: Be sure to merge the latest from "upstream" before making a pull request!
+```js
+// next.config.js 
+
+module.exports = {
+  ...withNextra(),
+  output: 'export',
+  ...
+};
+```
+
+You can find more information about static exports in [Next Documentation](https://nextjs.org/docs/pages/building-your-application/deploying/static-exports).
+
