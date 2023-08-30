@@ -1,6 +1,6 @@
 # Nextra Blog + Fleek Starter Kit
 
-![Preview](./.github/preview.png)
+![image](https://github.com/fleekxyz/fleek-demos-blog/assets/73345016/7430f39b-03a8-4749-8be8-0b6cd522e620)
 
 ## 🚀 Project Structure
 
