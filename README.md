@@ -2,6 +2,8 @@
 
 ![image](https://github.com/fleekxyz/fleek-demos-blog/assets/55561695/80e92031-d7af-40c3-b0ca-886f0f63f2f7)
 
+Simple and lean Nextra blog static template you can build upon. Output directory set to `export` and build command to `npm install && npm run build`.
+
 ## 🚀 Project Structure
 
 Inside of your Nextra project you'll see the following folders and files:
