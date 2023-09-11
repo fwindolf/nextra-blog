@@ -4,7 +4,7 @@
 
 ## 🚀 Project Structure
 
-Inside of your Nextra project, you'll see the following folders and files:
+Inside of your Nextra project you'll see the following folders and files:
 
 ```
 /
