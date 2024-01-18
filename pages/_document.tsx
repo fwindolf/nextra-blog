@@ -2,9 +2,9 @@ import { Html, Head, Main, NextScript } from 'next/document'
 
 export default function Document() {
   const meta = {
-    title: 'Fleek Demos Blog',
-    description: 'A blog the keep record of the Fleek Platform Demos.',
-    image: '/images/fleekCover.png',
+    title: 'fwindolf\'s blog',
+    description: 'A blog about fwindolf\'s experiences, insights and ramblings.',
+    image: '/images/fwindolf.jpg',
   }
 
   return (
@@ -16,11 +16,13 @@ export default function Document() {
         <meta property="og:description" content={meta.description} />
         <meta property="og:title" content={meta.title} />
         <meta property="og:image" content={meta.image} />
+        {/*
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:site" content="@yourname" />
         <meta name="twitter:title" content={meta.title} />
         <meta name="twitter:description" content={meta.description} />
         <meta name="twitter:image" content={meta.image} />
+        */}
       </Head>
       <body>
         <Main />
