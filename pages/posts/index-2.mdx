@@ -1,0 +1,252 @@
+---
+title: Hello World
+date: 2024/01/18
+description: Pattern Matching in Python
+author: fwindolf
+---
+
+# Type Matching (Python 3.10)
+
+## Introduction
+
+Python 3.10 brought a sweet new feature to the table – pattern matching.
+Similar to what you might find in languages like Scala or Rust, this addition empowers
+us to write more readable and efficient code.
+
+Let's delve into how we can use this feature in a bakery context,
+matching against various baked goodies and their attributes.
+
+Assume we have an enum representing our bakery's specialties:
+
+```python
+from enum import Enum
+
+class Pastry(Enum):
+    CROISSANT = 1
+    DANISH = 2
+    MUFFIN = 3
+    SCONES = 4
+```
+
+## Pattern Matching
+
+### Simple Value Matching
+
+Let's find out how to distinguish between the different types of pastries in an
+elegant way.
+
+```python
+def handle_pastry(pastry):
+    match pastry:
+        case Pastry.CROISSANT:
+            print("Buttery and flaky!")
+        case Pastry.DANISH:
+            print("Sweet and fruity!")
+        case Pastry.MUFFIN:
+            print("Perfect for coffee!")
+        case Pastry.SCONES:
+            print("Excellent with tea!")
+        case _:
+            print("That's not on the menu!")
+
+```
+
+This is the standard case we've all been using for quite some time when if-else clauses
+are not enough. With pattern matching, we can easily respond to each value with an
+appropriate comment about our baked goods.
+
+## Matching More Complicated Patterns
+
+### Matching a Tuple
+
+Assume our bakery groups items in a tuple, like a breakfast offer with pastry and
+beverage, we can match it as follows:
+
+```python
+def breakfast_service(pastry, beverage):
+    match pastry, beverage:
+        case Pastry.CROISSANT, 'Coffee':
+            print("OFFER: Croissant with coffee, a timeless classic!")
+        case Pastry.SCONES, 'Tea':
+            print("OFFER: Scones with tea, delightful!")
+        case _:
+            print("That's not an offer!")
+```
+
+### Matching One of Multiple Options
+
+But that's not enough, sometimes we also allow multiple options for a pastry:
+
+```python
+def breakfast_service(pastry, beverage):
+    match pastry, beverage:
+        case Pastry.CROISSANT, 'Coffee':
+            print("OFFER: Croissant with coffee, a timeless classic!")
+        case Pastry.SCONES | Pastry.DANISH, 'Tea':
+            print(f"OFFER: {pastry}, delightful!")
+        case _:
+            print("That's not an offer!")
+```
+
+### Wildcard Matches
+
+We can also use a wildcard to catch any case not specifically covered:
+
+
+```python
+def breakfast_service(pastry, beverage):
+    match pastry, beverage:
+        case _, 'Coffee':
+            print(f"OFFER: {pastry}, and a coffee on top!")
+        case Pastry.SCONES | Pastry.DANISH, 'Tea':
+            print(f"OFFER: {pastry}, delightful!")
+        case _:
+            print("That's not an offer!")
+```
+
+### Variable Matches
+
+Imagine a patron can order a variable number of muffins:
+
+```python
+def muffin_order(order):
+    match order:
+        case []:
+            print("No muffins ordered.")
+        case [Pastry.MUFFIN]:
+            print("One muffin coming right up!")
+        case [Pastry.MUFFIN, *rest]:
+            print(f"{len(rest)+1} muffins on the way!")
+```
+
+This allows us to match against a variable number of muffins, and we can even use the
+rest variable to get the number of muffins ordered. Note that the rest does not
+necessarily have to be only muffins, it can be any other pastry as well.
+
+### Matching Variable Options
+
+When dealing with more varied options, such as mixed orders:
+
+```python
+def mixed_order(order):
+    match order:
+        case [Pastry.CROISSANT, *rest]:
+            print(f"A croissant and {len(rest)} other items.")
+        case [Pastry.MUFFIN, Pastry.MUFFIN, *rest]:
+            print(f"Two muffins and {len(rest)} other items.")
+```
+
+What's interesting here is that we can match against a variable number of items, but
+also match against specific items in the order. The `rest` variable will contain the
+rest of the items in the order.
+
+### Capturing the Match
+
+In the example above, we already used implicit capturing of the rest of items in the
+order. Sometimes you need to capture the matched object explicitly:
+
+```python
+def capture_item(item):
+    match item:
+        case (Pastry.CROISSANT | Pastry.SCONES | Pastry.DANISH) as pastry:
+            print(f"Preparing a fresh {pastry.name}!")
+        case _:
+            print("That's not a Crossaint, Scones or Danish pastry!")
+```
+
+This is especially helpful if you have a number of choices for different types.
+
+### Adding Conditions
+
+We can also apply conditions to our matches:
+
+```
+def decorated_pastry(item, decoration):
+    match item, decoration:
+        case Pastry.MUFFIN, decoration if "frosting" in decoration.lower():
+            print("A muffin with frosting, coming up!")
+        case Pastry.MUFFIN, decoration:
+            print("A muffin with a cherry on top, coming up!")
+        case Pastry.DANISH, _ if decoration is not None:
+            print("We don't decorate our danish pastry!)
+```
+
+Making use of conditions can help us match against really complex patterns, and I've
+been using it to rewrite and simplify a lot of if/else chains inside the case blocks
+in my code.
+
+### Class Matching With Attributes
+
+When dealing with specific class instances, case matching is also possible on the
+attributes of the classes. Let's assume we have a Cake class:
+
+```python
+class Cake:
+    def __init__(self, flavor, icing):
+        self.flavor = flavor
+        self.icing = icing
+
+def cake_order(cake):
+    match cake:
+        case Cake(flavor="Chocolate", icing="Ganache"):
+            print("A chocolate cake with ganache, delicious!")
+        case Cake(flavor="Vanilla") if case.icing is not None:
+            print(f"A vanilla cake with {cake.icing}, delightful!")
+        case Cake(flavor="Vanilla"):
+            print("A vanilla cake, delightful!")
+```
+
+The match will be successful if the attributes of the class instance match the
+attributes in the case statement. This is especially useful when dealing with
+classes where some attribute describes the mode of operation, and others are used
+to describe the state of the object.
+
+###  Matching Dictionaries
+
+This way of matching also works with builtins like a dictionary:
+
+```python
+def online_order(order):
+    match order:
+        case {"item": "Cookie", "quantity": q} if q > 12:
+            print(f"A bulk order of {q} cookies!")
+        case {"item": "Cookie", "quantity": _}:
+            print("Cookies, the classic treat!")
+```
+
+### Type Matching
+
+Finally, we can check the type of object we're dealing with. This is where our bakery
+example breaks a bit, but I think it's nice to see how a simple type matching would
+look like, so you don't have to match `type(item)`.
+
+```
+def type_check(item):
+    match item:
+        case int():
+            print("We don't sell integers!")
+        case str():
+            print("We sell pastries, not strings!")
+        case Pastry():
+            print("That smells delicious!")
+```
+
+This looks a bit weird at first glance, but if you think about class/builtin type based
+matching, it makes sense. The str() builtin is a class, and we can match against it
+just like we would match against a class instance, but without the constraint on the
+content (kind of like `str(_)`).
+
+
+## Conclusion
+
+Pattern matching in Python 3.10 is a really powerful tool to simplify
+complicated if-else chains and improve code clarity.
+
+I hope you can apply those examples to your own code, and simplify it as well - not only
+if you're dealing with baked goods. As Python continues to evolve, we can expect
+even more elegant solutions baked right into the language.
+
+
+Sources
+(PEP 634 – Structural Pattern Matching: Specification)[https://peps.python.org/pep-0634/]
+(PEP 636 – Structural Pattern Matching: Tutorial)[https://peps.python.org/pep-0636/]
