@@ -9,12 +9,12 @@ author: fwindolf
 
 ## Introduction
 
-Python 3.10 brought a sweet new feature to the table – pattern matching.
+Python 3.10 brought a sweet new feature to the table: pattern matching.
 Similar to what you might find in languages like Scala or Rust, this addition empowers
 us to write more readable and efficient code.
 
-Let's delve into how we can use this feature in a bakery context,
-matching against various baked goodies and their attributes.
+Let's delve into how we can use this feature in our little example bakery,
+matching various baked goodies and their attributes.
 
 Assume we have an enum representing our bakery's specialties:
 
@@ -54,8 +54,6 @@ def handle_pastry(pastry):
 This is the standard case we've all been using for quite some time when if-else clauses
 are not enough. With pattern matching, we can easily respond to each value with an
 appropriate comment about our baked goods.
-
-## Matching More Complicated Patterns
 
 ### Matching a Tuple
 
@@ -237,10 +235,18 @@ just like we would match against a class instance, but without the constraint on
 content (kind of like `str(_)`).
 
 
-## Conclusion
+## Summary
 
 Pattern matching in Python 3.10 is a really powerful tool to simplify
 complicated if-else chains and improve code clarity.
+
+You can match
+- Values
+- Tuples, Lists, Dicts based on their content
+- Classes based on their attributes
+- Types
+
+and do a lot of crazy stuff like if clauses and aliases for matches.
 
 I hope you can apply those examples to your own code, and simplify it as well - not only
 if you're dealing with baked goods. As Python continues to evolve, we can expect
@@ -248,5 +254,5 @@ even more elegant solutions baked right into the language.
 
 
 Sources
-(PEP 634 – Structural Pattern Matching: Specification)[https://peps.python.org/pep-0634/]
-(PEP 636 – Structural Pattern Matching: Tutorial)[https://peps.python.org/pep-0636/]
+- [PEP 634 – Structural Pattern Matching: Specification](https://peps.python.org/pep-0634/)
+- [PEP 636 – Structural Pattern Matching: Tutorial](https://peps.python.org/pep-0636/)
