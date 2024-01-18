@@ -2,7 +2,7 @@
 title: All You Need To Know About Pattern Matching in Python
 date: 2024/01/18
 description: Pattern Matching in Python
-author: fwindolf
+author: Florian Windolf
 ---
 
 # Type Matching (Python 3.10)
@@ -158,7 +158,7 @@ This is especially helpful if you have a number of choices for different types.
 
 We can also apply conditions to our matches:
 
-```
+```python
 def decorated_pastry(item, decoration):
     match item, decoration:
         case Pastry.MUFFIN, decoration if "frosting" in decoration.lower():
@@ -166,7 +166,7 @@ def decorated_pastry(item, decoration):
         case Pastry.MUFFIN, decoration:
             print("A muffin with a cherry on top, coming up!")
         case Pastry.DANISH, _ if decoration is not None:
-            print("We don't decorate our danish pastry!)
+            print("We don't decorate our danish pastry!")
 ```
 
 Making use of conditions can help us match against really complex patterns, and I've
@@ -218,7 +218,7 @@ Finally, we can check the type of object we're dealing with. This is where our b
 example breaks a bit, but I think it's nice to see how a simple type matching would
 look like, so you don't have to match `type(item)`.
 
-```
+```python
 def type_check(item):
     match item:
         case int():
