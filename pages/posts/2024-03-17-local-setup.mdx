@@ -1,0 +1,208 @@
+---
+title: RPI/1 | Raspberry Pi Setup - Behind the Fritz!Box
+date: 2024/03/17
+description: Make a Raspberri Pi accessible from the Web
+author: Florian Windolf
+---
+
+import Image from 'next/image';
+
+
+# What We Will Achieve
+
+- **Raspberry Pi Setup:** We start with a fresh Pi and set it up so we can ssh into it
+- **Network Configuration:** We setup the network for SSHing into the Pi
+- **Security Measures:** We create a keypair to make it easy and secure to ssh into the Pi
+- **Port Forwarding:** We setup port forwarding on the router to allow accessing ssh and other things from everywhere
+- **DNS Setup:** We provide a domain name for the IP of the Pi to expose it to the internet
+- **Validation:** We make sure everything works correctly. This took me about a week because I had no clue :)
+
+
+# Installation
+
+Starting with the fresh Raspberry Pi 4, I downloaded and created a bootable SD card using the Raspbian image,
+although you could opt for another OS (Ubuntu, etc. Note that some might require additional configuration for SSH).
+I used the Raspberry Pi Imager to flash the image onto the SD card (it allows to pre-configure network settings
+and SSH access among other things).
+
+## First Connection
+
+With the Pi hooked up to my router via cable, I could easily locate it in the Network tab of my router.
+First thing I did was assigning it a static IP, so I can always reach it via the same IP in my network.
+
+To setup proper SSH access, I then SSHd into the Pi using username and the IP, which worked out of the box.
+
+For other OS, you might first have to hook up a keyboard and monitor to install the openssh-server, configure
+it to allow SSH access and then you can login via ssh.
+
+Connecting from my host machine, I first generated new SSH keys (or you could use existing ones):
+
+```bash
+ssh-keygen -t rsa -b 4096 -f /home/flo/.ssh/pi/id_ed25519
+```
+
+Then, I copied the SSH key to the Pi using:
+```bash
+ssh-copy-id -i /home/flo/.ssh/pi/id_ed25519.pub flo@192.168.178.100
+```
+
+(specifying my password) which allows me to login with the key from now on.
+
+I also set up an entry in my SSH config file for easy access:
+
+```bash
+code ~/.ssh/config
+```
+
+Adding:
+```
+Host pi
+    HostName        192.168.178.100
+    User            flori
+    IdentityFile    /home/flo/.ssh/pi/id_ed25519
+```
+
+Now, I can simply use `ssh pi` to log in. As I later also wanted to expose SSH to the
+web, I also disabled the password authentication for ssh and only allow ssh key
+authentication by changing the settings for the ssh server via `etc/ssh/sshd_config`
+
+
+```
+...
+PasswordAuthentication no
+UsePAM no
+...
+PubkeyAuthentication yes
+```
+
+Then restarting the ssh server via `service ssh restart` to apply the changes, only key based logins are possible.
+
+# Fritz!Box DNS Setup
+
+Now let's make the Pi accessible from the web. For this I again visited my routers configuration
+interface and first setup port forwarding for SSH, which we later extend to HTTP/HTTPS traffic.
+
+I first tried to setup DNS via DynDNS and Strato, which failed. Later I switched to MyFritz! and CloudflareDNS
+which worked really well. Note that for this, you first have to setup a MyFritz! account that
+gives your Fritz!Box a static IP, which you can then use later to setup the DNS.
+
+## Port Forwarding (SSH)
+
+But first things first. I wanted to be able to SSH into my Pi from wherever I am (to restart
+containers, fix stuff, etc.). Note that there are security implications, anyone who accesss
+the Pi can probably do a lot of harm to your local network and it's a security risks for ALL
+the devices in the home network. So login based SSH connections are a really bad idea!
+
+To set up the port forwarding, I did those things:
+
+1. Navigate to Internet > Forwarding > Portforwarding > Add Device and then select your Pi in the dropdown.
+2. Enable 'Release PING6' and 'Open firewall for delegated IPv6 prefixes of this device.'
+3. Do not set is as an Exposed Host (except maaaaaybe for testing, but I wouldn't recommend that either).
+
+<Image src="/images/blog/2024-03-17/fritzbox_forwarding.png" alt="General Port Forwarding Settings" width={1000} height={500} />
+
+Then, set up a new share for SSH:
+
+- Application: Other Application
+- Description: SSH
+- Protocol: TCP
+- Port: 22
+- Enable the forwarding.
+
+<Image src="/images/blog/2024-03-17/fritzbox_ssh_forwarding.png" alt="SSH Port Forwarding Settings" width={300} height={500} />
+
+
+If you already setup MyFritz, you can also directly use MyFritz instead of making it a normal
+port forwarding rule - the UI is just slightly different.
+
+## Validation
+
+Before we start, let's go over how to validate things quickly.
+
+To confirm everything is set up correctly:
+
+- Use tools like [nslookup.io](https://www.nslookup.io/) to check DNS propagation.
+- If port forwarding is enabled, test the SSH connection with `ssh [username]@[ip]`.
+
+Note: that SSH via the domain never worked for me, I was just always using the IP that
+I got from MyFritz or which was shown in the Internet tab in the router.
+
+## Setup
+
+Another small thing to check off is the concepts. This was not 100% clear to me when I
+started, so I just leave this bit of information here:
+
+- *DNS (Domain Name System)* is the system behind translateing domain names to IP addresses so for example
+browsers can access them. It's basically a distributed set of records/database where you can find information like IP addresses for domains. The distributed nature is why it can take a while between setting up a DNS record and the browser
+being able to resolve it - also depending on where on the world you're at.
+- *A* Record points a domain to an IPv4 address. This is how the domain is resolved to an IPv4 address, eg when you ping it.
+- *AAAA* Record links a domain to an IPv6 address. Same here.
+- *CNAME* (Canonical Name) aliases a domain to another domain. This is what you use for subdomains on your domain, eg. for foo.example.com you would setup a CNAME for foo.
+
+### DynDNS + CNAME (Strato)
+
+So how do we now allow browsers to find our Pi in the web? We setup a DNS record for the IP that we got from MyFritz or our provider. If we get a IP from the provider however, it can change. So we need to inform the nameservers about the
+change, which is the dynamic part in DynDNS.
+
+I initially tried using DynDNS with Strato, but the propagation was excruciatingly slow, the UI was horrible and in the end
+I could not really pinpoint why some CNAME records didn't work for me, but I assume the error was somewhere on my end.
+
+If you still want to set it up with your hoster using DynDNS, here is how.
+
+<Image src="/images/blog/2024-03-17/strato_dns_settings.png" alt="Strato DynDNS Settings" width={600} height={500} />
+
+- Get a DynDNS password from your hoster and enable DynDNS there.
+- Activate 'Use DynDNS' on the router.
+- Set the DynDNS provider to Custom.
+- Enter the Update-URL `https://<username>:<passwd>@dyndns.strato.com/nic/update?hostname=<domain>&myip=<ipaddr>,<ip6addr>` and other details provided by Strato.
+- Do not fill in the user/password/... into theurl, instead use the respective inputs.
+
+<Image src="/images/blog/2024-03-17/fritzbox_dyndns.png" alt="FritzBox DynDNS Setup" width={600} height={500} />
+
+In my hosters UI, I was then able to see the status of DynDNS as IPv4: logged in / IPv6: logged in.
+
+### Cloudflare DNS
+
+With MyFritz! and cloudflare, the setup was also quite easy:
+
+<Image src="/images/blog/2024-03-17/fritzbox_myfritz.png" alt="MyFritz Enabled" width={600} height={500} />
+
+First, I went to my router's configuration page and copied the IPv4 and IPv6 that MyFritz!
+provides to reach my Fritz!Box from the web.
+
+With that, I set up a Cloudflare Account and did the auto-setup for my domain (as I already
+had a setup with Strato). However that only worked partially, so I removed all auto-generated
+domain settings again and added:
+
+- A and AAAA entries for the IPs that I copied before.
+- CNAME records for all subdomains (and one for www.) that I wanted to add
+
+<Image src="/images/blog/2024-03-17/cloudflare_dns_setup.png" alt="Cloudflare DNS Settings" width={800} height={500} />
+
+with the domain records setup, I went back to Strato to set the DNS config to use
+an external DNS and put in the two URLs that Cloudflare provided.
+
+<Image src="/images/blog/2024-03-17/cloudflare_nameservers.png" alt="Cloudflare Nameserver Setup" width={600} height={500} />
+
+
+Finally, I also set the SSL/TLS setting to 'Full' and set the 'Development mode' to
+prepare for the next steps of this tutorial: The deployment of the actual services.
+
+
+<Image src="/images/blog/2024-03-17/cloudflare_ssl.png" alt="Cloudflare SSL Settings" width={500} height={500} />
+
+### Testing
+
+With everything set up and after waiting for the new DNS records to propagate, I
+sucessfully tested if I can ping my domain and if I can ssh into the IP that the ping
+returned.
+
+```bash
+ping fwindolf.dev
+```
+
+```bash
+ssh <ip> -i /home/flo/.ssh/pi/id_ed25519
+```
+
+After the successful test, it's time to move on to the next part: [The setup of dokku](2024-02-22-dokku-introduction)
