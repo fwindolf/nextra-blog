@@ -22,9 +22,9 @@ Inside of your Nextra project you'll see the following folders and files:
 ```
 
 ### Extra features
+
 - **Continuous Integration (CI):** `fleek sites ci` [Documentation.](https://docs.fleek.xyz/services/sites/#continuous-integration-ci)
 - **Adding custom domains:** `fleek domains create` [Documentation.](https://docs.fleek.xyz/services/domains/)
-
 
 ### Keep in mind:
 
@@ -41,4 +41,3 @@ module.exports = {
 ```
 
 You can find more information about static exports in [Next Documentation](https://nextjs.org/docs/pages/building-your-application/deploying/static-exports).
-
