@@ -1,0 +1,155 @@
+---
+title: RPI/2 | Introduction to Dokku
+date: 2024/03/18
+description: Setting Up A Dokku Environment
+author: Florian Windolf
+---
+
+import Image from 'next/image';
+
+## What We Will Achieve
+
+- **Install Dokku:** We install dokku and setup docker to use the SSD for storing containers
+- **Global Setup:** We configure the domain and generate SSH keys with which we can deploy
+- **Let's Encrypt:** We setup the let's encrypt plugin so we can later enable HTTPS
+
+## Installing Dokku on the Pi 4
+
+After using our existing setup from the [first post in this series](2024-03-17-local-setup)
+to ssh into our Pi, we can install dokku by running the super convenient setup script:
+
+```bash
+wget -NP . https://dokku.com/install/v0.33.6/bootstrap.sh
+sudo DOKKU_TAG=v0.33.6 bash bootstrap.sh
+```
+
+## Move Docker to SSD
+
+Since the SD Card that I put the OS on is only 32GB big, but I want to deploy multiple
+services on the Pi with some spare room for data storage, I added a SSD hat to the Pi.
+
+This however means, that all storage and docker containers need to be put on that SSD
+to begin with. To do this, I simply ran those few commands:
+
+- Stop docker: `service docker stop`.
+- Verify no docker process is running anymore `ps faux | grep docker`
+- Take a look at the current docker directory: `ls /var/lib/docker/`
+- Make a backup of the existing docker directory `tar -zcC /var/lib docker > /mnt/ssd/var_lib_docker-backup-$(date +%s).tar.gz`
+- Move the `/var/lib/docker` directory to the new partition: `mv /var/lib/docker /mnt/ssd/docker`
+- Make a symlink: `ln -s /mnt/pd0/docker /var/lib/docker` to replace the old docker directory
+- Verify everything looks like before `ls /var/lib/docker/` (note the trailing slash to resolve the symlink)
+- Start docker back up `service docker start`
+
+With that, we're ready to put some containers in place.
+
+## Dokku
+
+Now let's get to the fun part: [Dokku](https://dokku.com/).
+
+Dokku calls itself "The smallest PaaS implementation you've ever seen". PaaS as in "platform"
+as a service. If you've worked in the web development space, you might have come across heroku
+as a common way to quickly deploy things. It's beauty lies in the ease of use, where a simple
+`app.json` together with a `package.json` are enough to deploy a web application, and many
+other types of applications aswell.
+
+Dokku offers the same value, but in a self-hosted way. It became popular at the time where
+heroku killed its free tier a few years ago. Using a dokku installation on the remote
+server, you can very easily setup new *apps*, integrate their deployment into common CI
+workflows, manage the deployment, etc. It comes with reverse proxy built-in and offers
+plugin support to easily get HTTPS/SSL set up using letsencrypt.
+
+### Global Setup
+
+We start out with doing the global setup:
+
+First we add our global domain.
+
+```bash
+dokku domains:add-global fwindolf.dev
+dokku domains:report --global
+```
+The latter command will show you the current setup. Leaving out the `--global` flag
+tells you that there is no application deployed yet. We will add one later.
+
+We also enable nginx as our proxy using this command.
+
+```bash
+dokku proxy:set --global nginx
+```
+
+### Deploy Keys
+
+But before that, we need to setup an SSH key for the deployment. There are multiple ways to deploy
+an application, but the most prominent is to use an alternative git remote to push to.
+On push, dokku will then (re-)build the application and (re-)deploy it.
+
+I will show you how to setup github CI/CD to take over that job on a push in [another
+tutorial](2024-03-21-automatic-deployment).
+
+First, on the host (locally, where you develop), we want to generate a new SSH key for
+the deployments.
+
+```bash
+mkdir -p ~/.ssh/dokku/
+ssh-keygen -t rsa -b 4096 -N "" -C "deploy@fwindolf.dev" -f ~/.ssh/dokku/deploy
+```
+
+Now we need to copy the public key and add it to the dokku ssh keys. For that, on the
+local machine I ran the following command and copied the output to clipboard.
+
+```bash
+cat ~/.ssh/dokku/deploy.pub
+```
+
+After sshing into the Pi (remote, where we want to deploy), we add it via this command.
+
+```bash
+echo "<content>" | sudo dokku ssh-keys:add DEPLOY
+```
+
+If the output is the checksum, everything is fine. We now can add a ssh config option
+to automatically use this ssh key when pushing to the remote.
+
+
+### LetsEncript Setup
+
+To eventually get rid of the warning in browsers when accessing the website we need to enable
+HTTPS. The easiest way of acquiring a certificate for that is to use letsencrypt.
+
+letsencrypt is a open certificate authority that hands out SSL/TLS certificates for
+free on proof of ownership of a domain. In short, you solve a challenge and report the
+result back from the domain that is requesting a certificate, and letsencrypt issues
+the certificate.
+
+For dokku, there is a plugin that does just that, helping with everything from providing
+the logic to solve the challenge to configuring nginx to allow letsencrypt retrieve the
+result. We simply installed it via
+
+```bash
+sudo dokku plugin:install https://github.com/dokku/dokku-letsencrypt.git
+```
+
+Now everything that's left to do when we want to use it is to setup the configuration
+with our email and enable letsencrypt.
+
+```bash
+dokku domains:add <app> <subdomain>.fwindolf.dev
+dokku letsencrypt:enable <app>
+```
+
+If needed, the plugin will also auto-renew the certificate once it expires.
+
+```
+dokku letsencrypt:cron-job --add
+```
+
+### Sources
+
+Most of the above is described in the dokku documentation:
+
+- [Dokku Installation](https://dokku.com/docs/getting-started/installation/)
+- [SSL/HTTPS](https://dokku.com/docs/deployment/application-deployment/)
+
+
+Stay tuned for how to [deploy the first app](2024-03-19-the-first-app)
+
