@@ -1,0 +1,721 @@
+---
+title: RPI/3 | The First App - Powered By FastAPI
+date: 2024/03/19
+description: Deploying a Basic FastAPI Application
+author: Florian Windolf
+---
+
+import Image from 'next/image';
+
+## What We Will Achieve
+
+- **Write The App**: We create a "Hello World" FastAPI application
+- **App Configuration**: We setup the used ports, proxy settings and environment variables with dokku
+- **HTTPS Setup**: We get certificates for our app and make it accessible from the web
+
+## Check Current Setup
+
+To start off and check that everything we did so far works, we us dnslookup again to
+check if the DNS entries for our domain route to cloudflare or the publicly exposed
+router depending on the setup.
+
+If that works and we can ping our website, we try curl.
+
+```bash
+ping fwindolf.dev
+curl fwindolf.dev
+```
+
+The curl should respond with a "Welcome to nginx!" message, while if we type our URL
+into the browser, this page should appear:
+
+<Image src="/images/blog/2024-03-19/cloudflare_error.png" alt="Cloudflare Web Server Is Down Message" width={1000} height={500} />
+
+This is expected, as we don't have any application running yet.
+
+## Minimal FastAPI Application
+
+To have a deployable application, we will just a very basic FastAPI example, which can
+be found [here](https://github.com/fwindolf/fastapi-minimal.git).
+
+### Structure
+
+The application does not do much, but is enough to show the things necessary to get started with a dokku application. It consists of:
+
+- The application logic as
+    - the source code in `api/`, with `app.py` as the entrypoint
+    - some integration tests in `test/integration/`
+    - the environment in `.env` to be copied from `.env.example`
+- Everything needed for deployment as
+    - a `pyproject.toml` and the associated `poetry.lock` file that freezes the dependencies
+    - the `Dockerfile` and the `.dockerignore` to build a container
+    - an `app.json` file for some extra information for dokku
+
+
+We have three + one routes available:
+
+1. The home route (`/`) that shows a hello world message
+2. The `/health` route that provides a healthcheck to see if the container is running
+3. The `/v1/protected` route to mimick some logic behind a (very minimal) auth layer
+4. The `/docs` route provided by FastAPI with the API documentation.
+
+<Image src="/images/blog/2024-03-19/fastapi_docs.png" alt="Application Docs Page" width={1000} height={500} />
+
+### Application Logic
+
+As already stated, the application doesn't offer much in this state.
+
+The `app.py` entrypoint wraps our `FastAPI` application into gunicorn, which provides the sauce for speedy and low resource workers for basically any modern web framework.
+
+```python
+import uvicorn
+
+from api import app
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+
+The `api.app` is just the `FastAPI` instance, with two registered routers that handle
+the home and the protected routes.
+
+```python
+from fastapi import FastAPI
+
+from api.home import router as home_router
+from api.v1.protected import router as protected_router
+
+app = FastAPI()
+
+app.include_router(home_router, tags=["Home"])
+app.include_router(protected_router, prefix="/v1", tags=["V1"])
+```
+
+In the home, we have two functions that specify the routes, one for the `/` and one for the `/health` routes. Both of them return simple json.
+
+```python
+from fastapi import APIRouter
+
+router = APIRouter()
+
+
+@router.get("/")
+async def home():
+    return {"message": "Hello World!"}
+
+
+@router.get("/health")
+async def healthcheck():
+    return {"status": "ok"}
+```
+
+For the protected route, we first specified some settings in `api.settings` using `pydantic_settings`, which loads the members from the environment variables (but can be configured to do much more than that).
+
+```python
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    api_key: str
+
+
+settings = Settings()
+```
+
+Those settings are used in the `api.auth` to provide a helper to check if an `x-api-key` header is present. This is not a good choice for production use, but it brings across the point for this tutorial.
+
+```python
+from fastapi import HTTPException, Security
+from fastapi.security import api_key
+
+from api.settings import settings
+
+api_key_header = api_key.APIKeyHeader(name="X-API-KEY")
+
+
+async def validate_api_key(key: str = Security(api_key_header)):
+    if key != settings.api_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing Api Key")
+
+    return None
+```
+
+Finally, we use this method to check for authentication in the route handler for the
+protected route `/protected` by specifying it as a dependency for the router.
+
+```python
+from fastapi import APIRouter, Depends
+
+from api import auth
+
+router = APIRouter(dependencies=[Depends(auth.validate_api_key)])
+
+
+@router.get("/protected")
+async def secret():
+    return {"message": "This is some protected information"}
+```
+
+### Deployment
+
+All of that is packaged into a Dockerfile, based on a python base image.
+
+```dockerfile
+FROM python:3.10-slim as base
+
+ARG POETRY_VERSION=1.5.1
+
+ENV APP_DIR='/opt/app'
+
+ENV PYTHONFAULTHANDLER=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONHASHSEED=random \
+    PIP_NO_CACHE_DIR=off \
+    PIP_DISABLE_PIP_VERSION_CHECK=on \
+    PIP_DEFAULT_TIMEOUT=100 \
+    # Poetry
+    POETRY_HOME='/opt/poetry' \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_VERSION=${POETRY_VERSION} \
+    POETRY_CACHE_DIR='/opt/.cache/pypoetry' \
+    POETRY_VIRTUALENVS_IN_PROJECT=true
+
+# System dependencies
+RUN apt-get -qy update \
+    && apt-get install --no-install-recommends -y curl build-essential gcc ffmpeg \
+    && curl -sSL https://install.python-poetry.org | python3 - \
+    && apt-get remove -y curl build-essential \
+    && apt-get autoremove --purge -y \
+    && apt-get autoclean -y \
+    && rm -rf /var/cache/apt/* /var/lib/apt/lists/*
+
+ENV PATH="${POETRY_HOME}/bin:${PATH}"
+
+RUN mkdir -p ${APP_DIR}
+WORKDIR ${APP_DIR}
+
+COPY pyproject.toml poetry.lock ${APP_DIR}/
+
+RUN poetry --version \
+    && poetry install --no-ansi --no-root --without dev -v \
+    && rm -rf ${POETRY_CACHE_DIR} \
+    && poetry env info --path
+
+ENV PATH="${VIRTUAL_ENV}:${VIRTUAL_ENV}/bin:${PATH}"
+
+COPY . ${APP_DIR}
+WORKDIR ${APP_DIR}
+
+EXPOSE 8000
+CMD ["poetry", "run", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+In that we do the following:
+
+1. We setup the environment for Python, Pip and Poetry
+2. We install the dependencies needed to get the Poetry installation script, install
+poetry, and remove the added dependencies again to keep the image small.
+2. Then we expose `poetry` in the path and switch to our application directory.
+3. We copy over only the `pyproject.toml` and the `poetry.lock` file to make use of
+caching for the `poetry install` later
+4. We install the virtual environment, we previously set it up to land in the project
+(`.venv` folder)
+5. We expose the installed binaries (like `uvicorn`, etc) in the path
+6. We copy the rest of the application that's not ignored by `.dockerignore`
+7. We set the entrypoint to what we need to run the app. Note the `0.0.0.0` allows
+access from outside the container.
+
+As dokku tries to not only build this image later, but also needs to deploy it, we also
+add some extra information in `app.json`. In there you can find among other things
+the healthcheck route to see if the container is running, which allows dokku to change
+from an old to the newly deployed version without any downtime, aswell as the needed
+environment variables for the deployment.
+
+## Create the Dokku App
+
+Now that everything is ready and we have a running application, we need to deploy it on
+dokku. For that we run the following commands on the Pi.
+
+```bash
+dokku apps:create fastapi
+dokku domains:set fastapi fastapi.fwindolf.dev
+dokku apps:report
+```
+
+This results in an overview of the newly created application.
+
+```
+dokku apps:report
+=====> fastapi app information
+    App created at:                1710778681
+    App deploy source:
+    App deploy source metadata:
+    App dir:                       /home/dokku/fastapi
+    App locked:                    false
+```
+
+### Deployment
+
+To deploy there is two ways:
+
+1. We add our dokku as an alternative remote url for git (The URL that specifies where
+your repository lives, for example on `github.com/<your-name>/<your-repository-name>`)
+and then we can simply push to it.
+2. We use a container repository and specify the built docker image directly. We will
+not do this as I find the other way much more convenient, but if your application
+container is built in CI/CD anyways this would be the better choice.
+
+
+Before we can initialize the git deploy, we make sure again that the ssh config is
+correct. Make sure you already have a `~/.ssh/config` setup as we did in the last
+tutorial and your ssh public key exists already on the Pi. For me, the entry looks
+like this:
+
+```
+Host <IP of the Pi>
+    User            dokku
+    IdentityFile    /home/flo/.ssh/dokku/deploy
+```
+
+The IP could be both the Pi's IP in the home network as well as the one that you put
+into the A record in your Cloudflare settings. If you're using DynDNS, this should
+be the IP in the home network, as the public IP is subject to change. I didn't get
+it to work with the domain name, I assume it's because Cloudflare prohibits SSH via
+domain name.
+
+Now on the Pi, we run those commands:
+
+```bash
+dokku git:initialize fastapi
+dokku git:set --global deploy-branch main
+```
+
+The latter is probably not necessary, but better safe than sorry. Now we have set up
+dokku to automatically use a pre-recieve hook when we push to the dokku remote that
+builds the `main` branch of our application with the associated builder. The builder
+in our case is docker, which dokku determines automatically because we have a
+`Dockerfile` in our repository. We could also use
+[another builder](https://dokku.com/docs/deployment/builders/builder-management/),
+but I'm just used to docker.
+
+Before we can execute the deployment, we still have to specify the environment
+variables necessary to successfully launch the container. For that we run this
+command on the Pi.
+
+```bash
+dokku config:set fastapi API_KEY=1234
+```
+
+You could also add a `--no-restart`  flag to it to avoid a restart, but as there is no
+active deployment there is also nothing to be restarted yet anyways.
+
+Now finally, we can add the remote url on your local machine (not the Pi!) by executing
+those commands.
+
+```bash
+git remote add dokku dokku@<IP of the Pi>:fastapi
+git push dokku main
+```
+
+Note that this push does not push your changes to github, so it's a good idea to still
+do that once in a while to store your code safely.
+
+The latter command will trigger the build and the deployment of the current state on
+your main branch. I was greeted with this message, let's unpick it:
+
+```
+Enumerating objects: 38, done.
+Counting objects: 100% (38/38), done.
+Delta compression using up to 20 threads
+Compressing objects: 100% (33/33), done.
+Writing objects: 100% (38/38), 21.63 KiB | 4.33 MiB/s, done.
+Total 38 (delta 3), reused 0 (delta 0)
+-----> Cleaning up...
+-----> Building fastapi from Dockerfile
+remote: #0 building with "default" instance using docker driver
+remote: #1 [internal] load build definition from Dockerfile
+remote: #1 transferring dockerfile: 1.33kB done
+remote: #1 DONE 0.0s
+remote: #2 [internal] load metadata for docker.io/library/python:3.10-slim
+remote: #2 DONE 0.9s
+remote: #3 [internal] load .dockerignore
+remote: #3 transferring context: 67B done
+remote: #3 DONE 0.0s
+remote: #4 [1/8] FROM docker.io/library/python:3.10-slim@sha256:1326d0fd281d283b077fd249e618339a44c9ca5aae6e05cb4f069a087e827922
+remote: #4 DONE 0.0s
+remote: #5 [internal] load build context
+remote: #5 transferring context: 58.23kB done
+remote: #5 DONE 0.0s
+remote: #6 [2/8] RUN apt-get -qy update     && apt-get install --no-install-recommends -y curl build-essential gcc ffmpeg     && curl -sSL https://install.python-poetry.org | python3 -     && apt-get remove -y curl build-essential     && apt-get autoremove --purge -y     && apt-get autoclean -y     && rm -rf /var/cache/apt/* /var/lib/apt/lists/*
+remote: #7 [3/8] RUN mkdir -p /opt/app
+remote: #9 DONE 0.0s
+remote: #8 [4/8] WORKDIR /opt/app
+remote: #9 DONE 0.0s
+remote: #9 [5/8] COPY pyproject.toml poetry.lock /opt/app/
+remote: #9 DONE 0.0s
+remote: #10 [6/8] RUN poetry --version     && poetry install --no-ansi --no-root --without dev -v     && rm -rf /opt/.cache/pypoetry     && poetry env info --path
+remote: #10 0.518 Poetry (version 1.5.1)
+remote: #10 0.967 Creating virtualenv fastapi-minimal in /opt/app/.venv
+remote: #10 1.604 Using virtualenv: /opt/app/.venv
+remote: #10 1.715 Installing dependencies from lock file
+remote: #10 1.801
+remote: #10 1.801 Finding the necessary packages for the current system
+remote: #10 1.829
+remote: #10 1.829 Package operations: 15 installs, 0 updates, 0 removals
+remote: #10 1.829
+remote: #10 1.830   • Installing exceptiongroup (1.2.0)
+remote: #10 1.830   • Installing idna (3.6)
+remote: #10 1.831   • Installing sniffio (1.3.0)
+remote: #10 1.831   • Installing typing-extensions (4.9.0)
+remote: #10 2.319   • Installing annotated-types (0.6.0)
+remote: #10 2.320   • Installing anyio (4.2.0)
+remote: #10 2.320   • Installing pydantic-core (2.14.6)
+remote: #10 2.629   • Installing click (8.1.7)
+remote: #10 2.630   • Installing h11 (0.14.0)
+remote: #10 2.630   • Installing pydantic (2.5.3)
+remote: #10 2.631   • Installing python-dotenv (1.0.1)
+remote: #10 2.631   • Installing starlette (0.35.1)
+remote: #10 2.788   • Installing fastapi (0.109.0)
+remote: #10 2.789   • Installing pydantic-settings (2.2.1)
+remote: #10 2.790   • Installing uvicorn (0.28.0)
+remote: #10 3.480 /opt/app/.venv
+remote: #10 DONE 3.6s
+remote: #11 [7/8] COPY . /opt/app
+remote: #11 DONE 0.0s
+remote: #12 [8/8] WORKDIR /opt/app
+remote: #12 DONE 0.0s
+remote: #13 exporting to image
+remote: #13 exporting layers
+remote: #13 exporting layers 0.3s done
+remote: #13 writing image sha256:fd18987a3911b3501b44c61a592e468ccfd0f7e20705fb53a8009d094a576567 done
+remote: #13 naming to docker.io/dokku/fastapi:latest done
+remote: #13 DONE 0.3s
+```
+
+This chunk of logs indicates all the steps that docker went through to build the final
+image, which now lives on our Pi as `fastapi:latest`.
+
+```
+-----> Releasing fastapi...
+-----> Checking for predeploy task
+       No predeploy task found, skipping
+-----> Checking for release task
+       No release task found, skipping
+-----> Checking for first deploy postdeploy task
+       No first deploy postdeploy task found, skipping
+```
+
+The next lines are empty as we don't have any tasks for the deployment setup and also
+there was no previous deployment.
+
+```
+=====> Processing deployment checks
+-----> Deploying fastapi via the docker-local scheduler...
+-----> Deploying web (count=1)
+       Attempting pre-flight checks (web.1)
+-----> Executing 2 healthchecks
+       Running healthcheck name='port listening check' attempts=3 port=8000 retries=2 timeout=5 type='listening' wait=5
+       Running healthcheck name='healthcheck' delay=0 path='/health' retries=2 timeout=5 type='path'
+remote: 2024/03/18 17:30:58.531224 WARN RESTY Get "http://172.17.0.2:8000/health": dial tcp 172.17.0.2:8000: connect: connection refused, Attempt 1
+       Healthcheck succeeded name='port listening check'
+       Healthcheck succeeded name='healthcheck'
+       All checks successful (web.1)
+```
+
+The next block deploys the image and waits until the container is up, as indicated by
+the healthcheck that first fails and then succeeds.
+
+```
+=====> Start of fastapi container output (web.1)
+       INFO:     Started server process [7]
+       INFO:     Waiting for application startup.
+       INFO:     Application startup complete.
+       INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+       INFO:     172.17.0.1:41380 - "GET /health HTTP/1.1" 200 OK
+=====> End of fastapi container output (web.1)
+```
+
+This shows us the output of the container that was started, which looks good. You can
+also see the second (succeeding) healthcheck that shows up in the logs.
+
+```
+=====> Triggering early nginx proxy rebuild
+-----> Ensuring network configuration is in sync for fastapi
+-----> Configuring fastapi.fwindolf.dev...(using built-in template)
+-----> Creating http nginx.conf
+       Reloading nginx
+-----> Running post-deploy
+remote:  !     Detected IPv4 domain name with nginx proxy enabled.
+remote:  !     Ensure the default nginx site is removed before continuing.
+-----> Ensuring network configuration is in sync for fastapi
+-----> Configuring fastapi.fwindolf.dev...(using built-in template)
+-----> Creating http nginx.conf
+       Reloading nginx
+```
+
+The nginx config is now built based on the configuration that we set up. We did not yet
+set that up, so the basic configuration is built.
+
+In general, dokku uses a `.sigil` template to generate the configuration for each
+application based on the configuration (which ports to use, if SSL is enabled, etc).
+It mostly does everything out of the box, but we could also add a `nginx.conf.sigil`
+to our application to change the default behaviour. More information on that can be
+found [here](https://dokku.com/docs/networking/proxies/nginx/#customizing-the-nginx-configuration).
+
+```
+-----> Renaming containers
+       Renaming container fastapi.web.1.upcoming-15327 (827d5b3f3307) to fastapi.web.1
+-----> Checking for postdeploy task
+       No postdeploy task found, skipping
+=====> Application deployed:
+       http://fastapi.fwindolf.dev:8000
+```
+
+In the last step, it would exchange the deployments and then destroy the old one, after
+which the newly built deployment is visible to the user.
+
+### Configuration
+
+#### CNAME Record
+
+If not already happened, we no can go to our Cloudflare Dashboard and add a new CNAME
+entry for `fastapi` for the domain, in my case `fwindolf.dev`. Note that this can take
+some time to propagate, so if a curl comes back with `Could not resolve host: ...`, just
+wait a few hours and try again.
+
+```bash
+curl http://fastapi.fwindolf.dev
+```
+
+#### Ports Mapping
+
+However, the above url is still not reaching our API. The reason is that dokku does not
+know how to handle the incoming HTTP traffic on port 80 (default HTTP). We still have
+to set up a port mapping on the Pi.
+
+```bash
+dokku ports:list fastapi
+```
+
+Outputs a underwhelming `No port mappings configured for app` message. So we run a
+
+```bash
+dokku ports:set fastapi http:80:8000
+```
+
+to map the incoming HTTP Port on 80 to the port our `fastapi` application uses. Now the
+above curl should return the following:
+
+```json
+{"message": "Hello World!"}
+```
+
+
+### HTTPS with Let's Encrypt
+
+Typing the url into your browser however will warn you that this page is not safe and
+will decide to save you from great evil. To avoid that, we need to set up SSL/TLS to
+allow communication to our server via HTTPS.
+
+Big corporations have own costly certificates for that, but we are more than happy with
+the certs that [Let's Encrypt](https://letsencrypt.org/) provides us with. In the
+last tutorial, we have already installed the plugin and we should be ready to go now.
+So we simply use the plugin to get us the certs.
+
+```bash
+dokku letsencrypt:set fastapi email "florianwindolf@gmail.com"
+dokku letsencrypt:enable fastapi
+```
+
+```
+=====> Enabling letsencrypt for fastapi
+-----> Enabling ACME proxy for fastapi...
+-----> Getting letsencrypt certificate for fastapi via HTTP-01
+        - Domain 'fastapi.fwindolf.dev'
+2024/03/18 17:06:04 No key found for account florianwindolf@gmail.com. Generating a P256 key.
+2024/03/18 17:06:04 Saved key to /certs/accounts/acme-v02.api.letsencrypt.org/florianwindolf@gmail.com/keys/florianwindolf@gmail.com.key
+2024/03/18 17:06:04 [INFO] acme: Registering account for florianwindolf@gmail.com
+2024/03/18 17:06:05 [INFO] [fastapi.fwindolf.dev] acme: Obtaining bundled SAN certificate
+       !!!! HEADS UP !!!!
+
+       Your account credentials have been saved in your Let's Encrypt
+       configuration directory at "/certs/accounts".
+
+       You should make a secure backup of this folder now. This
+       configuration directory will also contain certificates and
+       private keys obtained from Let's Encrypt so making regular
+       backups of this folder is ideal.
+2024/03/18 17:06:05 [INFO] [fastapi.fwindolf.dev] AuthURL: https://acme-v02.api.letsencrypt.org/acme/authz-v3/327811043977
+2024/03/18 17:06:05 [INFO] [fastapi.fwindolf.dev] acme: Could not find solver for: tls-alpn-01
+2024/03/18 17:06:05 [INFO] [fastapi.fwindolf.dev] acme: use http-01 solver
+2024/03/18 17:06:05 [INFO] [fastapi.fwindolf.dev] acme: Trying to solve HTTP-01
+2024/03/18 17:06:10 [INFO] [fastapi.fwindolf.dev] The server validated our request
+2024/03/18 17:06:10 [INFO] [fastapi.fwindolf.dev] acme: Validations succeeded; requesting certificates
+2024/03/18 17:06:11 [INFO] [fastapi.fwindolf.dev] Server responded with a certificate.
+-----> Certificate retrieved successfully.
+-----> Installing let's encrypt certificates
+-----> Unsetting DOKKU_PROXY_PORT
+-----> Configuring fastapi.fwindolf.dev...(using built-in template)
+-----> Creating https nginx.conf
+       Enabling HSTS
+       Reloading nginx
+-----> Ensuring network configuration is in sync for fastapi
+-----> Configuring fastapi.fwindolf.dev...(using built-in template)
+-----> Creating https nginx.conf
+       Enabling HSTS
+       Reloading nginx
+-----> Disabling ACME proxy for fastapi...
+-----> Done
+```
+
+This output nicely shows you what happens behind the curtains.
+
+- The ACME proxy is added to our nginx config, which allows let's encrypt to access the
+results of the challenge
+- We generate cert keys locally corresponding to our email
+- Then we hit the let's encrypt endpoint that gives us the challenge
+- The challenge HTTP-01 is solved using a docker-container that we pulled when
+installing the plugin
+- The results are placed in the expected folder
+- Let's encrypt fetches the results from our Pi and responds with the certificates
+- We save the certificates and rebuild nginx.conf to remove the ACME proxy and enable
+HTTPS
+
+We can validate this works by looking at the report:
+
+```
+dokku letsencrypt:report fastapi
+=====> fastapi letsencrypt information
+    Letsencrypt active:            true
+    Letsencrypt autorenew:         false
+    Letsencrypt computed dns provider:
+    Letsencrypt global dns provider:
+    Letsencrypt dns provider:
+    Letsencrypt computed email:    florianwindolf@gmail.com
+    Letsencrypt global email:
+    Letsencrypt email:             florianwindolf@gmail.com
+    Letsencrypt expiration:        1718553969
+    Letsencrypt computed graceperiod: 2592000
+    Letsencrypt global graceperiod:
+    Letsencrypt graceperiod:
+    Letsencrypt computed lego docker args:
+    Letsencrypt global lego docker args:
+    Letsencrypt lego docker args:
+    Letsencrypt computed server:   https://acme-v02.api.letsencrypt.org/directory
+    Letsencrypt global server:
+    Letsencrypt server:
+```
+
+If you want, you can now enable the re-generation of the certificates with a cron job in
+the plugin. This is generally a good idea, then you don't have to think about renewing
+the certificates every two months (For me a auto-renew command responds with "fastapi
+still has 59d, 22h, 52m, 53s left before renewal").
+
+```bash
+dokku letsencrypt:cron-job --add
+sudo -H -u dokku crontab -l
+```
+
+The output should be something like
+
+```
+-----> Added cron job to dokku's crontab.
+```
+
+and
+
+```
+@daily /var/lib/dokku/plugins/available/letsencrypt/cron-job
+```
+
+This means that every day, the let's encrypt plugin will try to renew our certificates.
+
+## Validation
+
+With that setup, we should now no longer be able to curl the HTTP endpoint. The response
+is an nginx error page that tells us the http endpoint is being permanently redirected.
+
+```bash
+curl fastapi.fwindolf.dev
+```
+
+```html
+<html>
+<head><title>301 Moved Permanently</title></head>
+<body>
+<center><h1>301 Moved Permanently</h1></center>
+<hr><center>nginx</center>
+</body>
+</html>
+```
+
+With the HTTPS endpoint, we should however get the hello world response.
+
+```bash
+curl https://fastapi.fwindolf.dev
+```
+
+We should also be able to see it directly in the browser.
+
+<Image src="/images/blog/2024-03-19/browser_hello_world.png" alt="Not Authenticated Error" width={1000} height={500} />
+
+This means our application is now deployed, and we can try to access the secret.
+
+<Image src="/images/blog/2024-03-19/browser_not_authenticated.png" alt="Not Authenticated Error" width={1000} height={500} />
+
+To still reach the API, we go back to curl and add a header:
+
+```bash
+curl https://fastapi.fwindolf.dev/v1/protected -H "x-api-key: 1234"
+```
+
+The result is the expected
+
+```json
+{"message":"This is some protected information"}
+```
+
+## Troubleshooting
+
+Dokku offers some way to take a look into the container and the nginx.
+
+### Container Logs
+
+The overall container logs can be viewed via this command.
+
+```bash
+dokku logs fastapi
+```
+
+It spills all the logs, so you can easily see what endpoints have been called.
+
+### Nginx logs
+
+If you don't see expected calls showing up in the container logs, the next thing to
+ search is the nginx access logs.
+
+```bash
+dokku nginx:access-logs fastapi
+```
+
+Here you see all calls that have been forwarded to your application by nginx. This will
+contain quite some clutter as every endpoint that's visible to the web will be visited
+by many different crawlers and bots as soon as it has a DNS record.
+
+If that doesn't help you, you can also take a look at the nginx error logs.
+
+```bash
+dokku nginx:error-logs fastapi
+```
+
+This will contain all the errors that nginx encountered, for example if it couldn't
+start up or stopped unexpectedly. Also all potentially problematic calls will be
+logged here.
+
+
+
+
+
+
+
