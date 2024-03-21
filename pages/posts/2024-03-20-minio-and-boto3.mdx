@@ -1,0 +1,318 @@
+---
+title: RPI/4 | Adding Minio to our Zoo
+date: 2024/03/20
+description: Using Minio to save on S3 costs
+author: Florian Windolf
+---
+
+
+## Minio
+
+Minio is an open-source, high-performance object storage service, which is API
+compatible with Amazon S3. This means you can use Minio to store any amount of data in
+a system that is highly available, secure, and scalable.
+
+It's perfect for running on your own infrastructure, helping to keep your data close
+and under your control, while still offering the scalability and speed of cloud-based
+object storage solutions.
+
+Note: Cloudflare's Terms of Service actually prohibit serving "disproportionate" amounts
+of non-HTML content, so try to use this with caution. My guess is hobby projects don't
+come close to the thresholds that would be in place, but I would still not overuse it.
+
+> Use of the Service for serving video (unless purchased separately as a Paid Service)
+or a disproportionate percentage of pictures, audio files, or other non-HTML content,
+is prohibited.
+
+### Create Application
+
+The first step is to create a new application on Dokku. But before that, let's create
+a new `CNAME` for `minio.fwindolf.dev`, so we don't have to wait for propagation later.
+
+Then run the commands to create the minio application.
+
+```bash
+dokku apps:create minio
+dokku domains:set minio minio.fwindolf.dev
+```
+
+### Configuration
+
+Next, we configure Minio's authentication and domain settings
+
+```bash
+# Set environment variables without restarting the Minio service
+dokku config:set --no-restart minio MINIO_USERNAME=dokku MINIO_DOMAIN=minio.fwindolf.dev
+
+# Securely generate and set the root user/password
+dokku config:set --no-restart minio MINIO_ROOT_PASSWORD=$(openssl rand -base64 45 | tr -d \=+ | cut -c 1-32)
+dokku config:set --no-restart minio MINIO_ROOT_USER=$(openssl rand -base64 45 | tr -d \=+ | cut -c 1-20)
+
+# Configure nginx to accept larger body sizes, useful for large object uploads
+dokku config:set --no-restart minio NGINX_MAX_REQUEST_BODY=15M
+
+# Display the current config settings
+dokku config:show
+```
+
+Adjusting the nginx configuration ensures that your Minio server can handle the upload
+and download of large files without hitting HTTP 413 errors: "Request Entity Too Large".
+
+```bash
+# Set the port mappings for Minio
+dokku ports:add minio http:80:9000
+dokku ports:add minio https:443:9000
+dokku ports:add minio https:9001:9001 # For UI
+dokku ports:remove minio http:80:5000
+```
+
+### Setup Storage Directory
+
+Creating and configuring the storage directory is crucial as this is where Minio will
+store the actual data:
+
+```bash
+# Create and set permissions for the storage directory
+sudo mkdir -p /var/lib/dokku/data/storage/minio
+sudo chown -R dokku:dokku /var/lib/dokku/data/storage/minio
+
+# Mount the storage directory to the Minio container
+dokku storage:mount minio /var/lib/dokku/data/storage/minio:/home/dokku/data
+```
+
+### Install from Git Repository
+
+Integrating your Minio setup with a [Git repository](https://github.com/fwindolf/minio-dokku.git)
+allows for easy updates and version control.
+For that I've updated an existing package with a working `Dockerfile` and
+`app.json`. This repository makes use of a `nginx.conf.sigil` for nginx configuration
+as described in the [last post](2024-03-19-the-first-app).
+
+```bash
+# Sync the repository and build the app
+dokku git:sync --build minio https://github.com/fwindolf/minio-dokku.git main
+```
+
+This command will clone your Minio configuration from the specified Git repository and
+build it accordingly.
+
+### Let's Encrypt for HTTPS
+
+To send and recieve data in an encrypted connection, we then also again enable HTTPS
+using the let's encrypt plugin.
+
+```bash
+# Configure Let's Encrypt and enable HTTPS
+dokku letsencrypt:set minio email florianwindolf@gmail.com
+dokku letsencrypt:enable minio
+```
+
+With that, everything should be set up and ready to go! So let's start using it.
+
+### Validation
+
+To check if everything works as expected, we use the Minio Client `mc` through Docker.
+This saves us an install that we probably won't need later.
+
+First, we set up an alias that stores connection information and authentication that we
+can then use later.
+
+```bash
+sudo docker run --rm minio/mc alias set myminio https://minio.fwindolf.dev $(dokku config:get minio MINIO_ROOT_USER) $(dokku config:get minio MINIO_ROOT_PASSWORD)
+```
+
+Using that alias, we can then create a bucket.
+
+```bash
+sudo docker run --rm minio/mc mb myminio/test
+```
+
+And finally, upload a file to that bucket. For this, we first create a dummy file and
+then mount the current directory to the container, from which we upload it using `mc`.
+
+```bash
+echo "hello world" > foo.txt
+sudo docker run --rm -v $(pwd):/data minio/mc cp /data/foo.txt myminio/test/
+rm foo.txt
+```
+### UI
+
+In theory, there is also a admin interface for minio. It is available on port 9001,
+which you have to forward in your router if you want to make use of it.
+
+It should be available via the raw IP (and HTTP only) on port 9001 after forwarding.
+The raw IP is needed as Cloudflare does not pass through requests coming on port 9001
+for our domain. HTTP then of course is also not available as we set up HTTPS for our
+nginx which we skip when using the raw IP. So the URL I was using is
+`https://<IP>:9001/login`.
+
+For authentication, simply use the same `MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD`
+content as above. In the UI, you should then be able to see the created bucket and
+uploaded file.
+
+
+## Usage in API
+
+Just having the possibility to store data on our Pi is nice, but we really also want
+to make use of it. For that, we'll extend our FastAPI from [the previous tutorial](2024-03-19-the-first-app)
+to include an endpoint to create a bucket as a toy example.
+
+### Boto3
+
+In your FastAPI service, you can now install `boto3`.
+
+```bash
+poetry add boto3@latest
+```
+
+It's a package from Amazon AWS that allows you to interact with AWS resources,
+like S3 storage and others. As Minio is S3 API compatible, we can use it to do all
+kinds of things that we would normally do with S3.
+
+### S3 Service
+
+To wrap all S3 interaction, let's create a service class:
+
+```python
+
+import boto3
+from api.settings import settings
+
+class AWSS3Service:
+    def __init__(self):
+        self.client = boto3.client(
+            "s3",
+            endpoint_url=settings.s3_endpoint,
+            aws_access_key_id=settings.s3_access_key_id,
+            aws_secret_access_key=settings.s3_secret_key,
+            aws_session_token=None,
+            config=boto3.session.Config(signature_version="s3v4"),
+        )
+
+    ...
+```
+
+This assumes we have add the following environment variables to our API Settings as well
+as exposed them as environment variables.
+
+```python
+class Settings(BaseSettings):
+    api_key: str
+
+    s3_endpoint: str
+    s3_access_key_id: str
+    s3_secret_key: str
+```
+
+
+```bash
+dokku config:set fastapi S3_ENDPOINT="https://minio.fwindolf.dev"
+dokku config:set fastapi S3_ACCESS_KEY_ID="405ZJDZByzx9xCGaadK2"
+dokku config:set fastapi S3_SECRET_KEY="TOOfMSCeiF7UWsFaQOLjUxQBYxNitr2L9ntfTano"
+```
+
+Don't forget to include them in your `app.json` for documentation purposes.
+
+To create buckets and upload files, we add more methods to the service
+
+```python
+import logging
+from typing import IO
+from botocore.client import ClientError
+
+class AWSS3Service:
+    ...
+    def create_bucket(self, bucket: str):
+        try:
+            return self.client.create_bucket(
+                Bucket=bucket,
+                CreateBucketConfiguration={"LocationConstraint": "eu-central-1"},
+            )
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "BucketAlreadyOwnedByYou":
+                return False
+
+            logging.exception("Could not create bucket s3://%s/: %s", bucket, e)
+            raise
+        except Exception as e:
+            logging.exception("Invalid create bucket s3://%s/: %s", bucket, e)
+            raise
+
+        return True
+
+    def _upload_bytes(self, data: IO[bytes], bucket: str, name: str):
+        try:
+            self.client.upload_fileobj(data, bucket, name)  # type: ignore
+            logging.info("Uploaded s3://%s/%s", bucket, name)
+        except ClientError as e:
+            logging.exception("Could not upload s3://%s/%s: %s", bucket, name, e)
+            raise
+        except Exception as e:
+            logging.exception("Invalid upload s3://%s/%s: %s", bucket, name, e)
+            raise
+```
+
+Now we can use our client to create a bucket and then upload some byte object. This
+method we can then use to upload an image for example
+
+```python
+class AWSS3Service:
+    ...
+    def upload_image(self, image: IO[bytes], bucket: str, name: str):
+        assert name.endswith(".jpg") or name.endswith(".jpeg") or name.endswith(".png")
+        self._upload_bytes(data=image, bucket=bucket, name=name)
+        return self.generate_presigned_url(bucket=bucket, name=name)
+```
+
+What's still missing is a way to see what we uploaded, so let's also write a method that
+is able to list some files.
+
+```python
+from typing import Generator
+
+class AWSS3Service:
+    ...
+    def list_files(self, bucket: str, folder: str) -> Generator[str, None, None]:
+        try:
+            response = self.client.list_objects(Bucket=bucket, Prefix=folder)
+            return [content.get("Key") for content in response.get("Contents", [])]
+        except ClientError as e:
+            print(f"Could not list files in s3://{bucket}/{folder}: {e}")
+            raise
+
+```
+
+To make the service usable throught our API, we can create a annotated type that
+automatically injects the service into routes that use it.
+
+```python
+from fastapi import Depends
+from typing import Annotated
+
+async def aws_s3_service():
+    return AWSS3Service()
+
+
+AWSS3ServiceDependency = Annotated[
+    AWSS3Service, Depends(aws_s3_service, use_cache=True)
+]
+```
+
+The dependency can then be used like this in an endpoint:
+
+```python
+@router.get("/bucket/create")
+def get_static_image(*, name: str, s3_service: AWSS3ServiceDependency, response: Response):
+    try:
+        created = s3_service.create_bucket(bucket=name)
+        if created:
+            response.status_code = 201
+            return {"message": "success"}
+        else:
+            response.status_code = 200
+            return {"message": "success"}
+
+    except Exception as e:
+        response.status_code = 500
+        return {"message": "failed", "reason": str(e)}
+```
