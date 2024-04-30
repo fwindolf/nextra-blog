@@ -1,0 +1,192 @@
+---
+title: On SOLID principles
+date: 2024/04/29
+description: How to get the most out of SOLID
+author: Florian Windolf
+---
+
+
+## What's SOLID?
+
+The SOLID Principles are five principles of object oriented class design, that try to
+help programmers when write clean code.
+
+Copied straight from Wikipedia, the principles are:
+
+- The Single-responsibility principle: "There should never be more than one reason for a class to change." In other words, every class should have only one responsibility.
+- The Open–closed principle: "Software entities ... should be open for extension, but closed for modification."
+- The Liskov substitution principle: "Functions that use pointers or references to base classes must be able to use objects of derived classes without knowing it." See also design by contract.
+- The Interface segregation principle: "Clients should not be forced to depend upon interfaces that they do not use."
+- The Dependency inversion principle: "Depend upon abstractions, [not] concretes."
+
+They are also often brought up in the same context as Clean Code and were introduced by
+the same guy (Robert Martin), but came a bit earlier. The acronym SOLID has been coined by
+Michael Feathers though.
+
+SOLID and Clean Code aim for the same goals
+
+- Keep the codebase maintainable
+- Reduce the number of bugs
+- Facilitate collaboration
+
+but the latter concentrates a bit more on the craftmanship, while SOLID offers the
+underlying principles. Small focussed functions as a practice for example help adhere
+to the Single Responsibility principle.
+
+### Single Responsibility
+
+As I understand it, the Single Responsibility Principle (SRP) states that a class should
+only have a single purpose. As this is quite hard to scope, the single reason to change
+is a good proxy.
+Applying the principle will lead to small entitites that are cohesive and very focussed
+on solving an actual problem. When the scope of a class grows, it becomes harder to
+track down side effects, have an overview of all the usages up to a worst case where it
+gets impossible to keep the full functionality in a mental model at a time.
+
+### Open-Closed Principle
+
+The Open-Closed Principle (OCP) is a complicated way of saying a very obvious thing: If
+everybody that needs to add to a certain entity needs to change it, every change will be
+hard. In my understanding, it urges you to write code that is extensible by allowing
+specialization and/or extension, but restricts others from modyfing things.
+Every modification of the original could lead to unintended side effects, making
+seemingly easy changes turn into a rabbit hole. Every extension or specialization leaves
+the original code untouched, therefore being easier to work with and less risky.
+
+### Liskov Substitution
+
+The Liskov Substitution Principle (LSP) ensures that each child class can replace its
+parent class. In other words, if you implement an interface it should be done in a way
+that all implementations keep the "contract" that is established by the interface and/or
+base implementation. In modern OOP this is somewhat of a no-brainer, as there are usually
+language features and/or libraries that allow to enforce such a contract (eg. Protocols,
+ABC in python).
+
+### Interface Segregation
+
+The Interface Segregation Principle (ISP) extends the single responsibility principle
+by stating that interfaces should be tailored to the relevant use case. It basically
+shows the option of splitting interfaces into several complementary interfaces tailored
+to a single use, instead of packing everything into one big interface where some
+users only implement a small subset of the defined methods.
+Similar to the SRP, smaller and cohesive interfaces are then easier to maintain,
+implement and understand.
+
+### Dependency Inversion
+
+The Dependency Inversion Principle (DIP) states that modules should only be coupled
+via abstractions. With dependency injection becoming more prominent, the principle
+should be quite well known - albeit maybe not by that name. Instead of interacting
+with low level components of another domain or module, extract the functionality into
+an interface and use that interface everywhere. This promotes low coupling between
+systems and makes the code a bit more flexible.
+
+
+## What's YAGNI?
+
+Now that we know the 5 principles of SOLID, let's go more towards my opinion towards
+the topic.
+
+### You're Not Gonna Need It!
+
+We as developers are very bad at estimating the changes that will be made to the
+software that we write in the future. Hitting that same note, YAGNI tries to save you
+from thinking to much about the what-ifs of your code.
+You're not going to need that different database, the different IO logic, etc. I think
+I have never been 100% right about how the code will change in the future, so every
+attempt that I've made to predict where I would maybe need that interface was at least
+partially incorrect.
+All that happened was that I took almost the same time rewriting the interface that I
+needed to put the interface in place in the first place. So instead of planning ahead,
+I will build for what I need right now and what I know for sure at the time when
+building.
+
+## What To Take From This Article
+
+But of course, it's not black and white. I have gone overboard with following SOLID
+principles, clean code, etc. in some projects, and have suffered from not follwoing the
+principles enough in others.
+
+### Size and Scope matter
+
+Every project is different, and not all projects become big. Building a small solo-project
+with all the flexibility and abstraction you can get might be a nice exercise but will
+slow you down immensely, as most of your time is spent writing the abstraction and not
+the actual logic. For those kind of projects I try to be very pragmatic and build up as
+I go. Most end up at the side of the road to be forever ignored anyways, and the ones
+that grow will get some refactoring here and there to add the interfaces that are
+necessary.
+
+For big work projects, the approach is different as well. You mostly sit down and think/
+talk architecture, domains, etc. This naturally leads to more abstraction from the get
+go, and modules that are touched/maintained by different people only interact well via
+very strict and static contracts. Also, the code that someone else wrote is naturally
+harder to understand than your own, so a bit more focus on simplicity, single
+responsibility and cohesion is necessary.
+
+### Locality of Code
+
+Another aspect of SOLID is that if you follow it to the extent that most tutorials
+propose, you will end up with what was previously a 30-line functions scattered around
+across different interfaces, implementations in different files, etc.
+
+While this improves maintainability of each single part, it makes the functionality
+much harder to understand. It's not immediately obvious from looking at 30 lines, instead
+you have to keep the different partsin a mental model, which is harder.
+The bigger the functionality, the harder that becomes.
+
+So in my opinion, it's actually not
+always a good idea to abstract all different parts of that functionality, even if they
+are not 100% the same responsibility. Being able to visually see the complete
+implementation is an underrated aspect, especially for smaller projects.
+
+### Perfect Is The Enemy Of Done
+
+The last point to keep in mind when programming to me is: Perfect is the enemy of done.
+Sure, you can strive for the perfect interfaces, the perfect implementation and the
+100% test coverage to ensure everything works. In my experience however, trying to
+actually going for the 100% from the start will slow you down immensely.
+
+The goal of SOLID, clean code, etc is to make your life easier and to help you guide to
+being a better programmer. It offers you tools and concepts that help to not fall into
+the same holes that thousands before you have. But the other big trap that I came
+across in programming is the thinking that the first throw has to be perfect or as close
+to perfect as possible given the limited knowledge you have. It does not. Starting out
+small and going until you need abstractions is a perfectly suitable way in many
+projects. For the decision when, what and how to abstract you can fall back to SOLID
+and Clean Code.
+
+## Conclusion
+
+In this article I tried to share my philosophy to writing code. But as always, it's
+a learning journey and experiences from only a few hands full of projects.
+
+What prompted this article was post about how following SOLID made a project go perfect
+on LinkedIn. While this might be true, my experience has been slightly different so I
+decided to share it.
+
+To summarize, I'd go from a Miles Davis quote:
+
+> Learn the score, then throw it away
+
+While not fully true, having learned the SOLID principles is a very good thing. It gives
+you perspective on concepts like cohesion, coherence, coupling, well maintainable code
+and a few more.
+
+Building your software with those principles in mind will always make it better.
+Building your software around those principles will not, which is a mistake I have seen
+and made multiple times.
+
+So my key learnings would be:
+
+- Build interfaces when you need them, not when you think you might need them
+- Keep your modules seperate and behind smallish interfaces, but keep locality of code
+in mind for within modules.
+- There is no shame in refactoring, even early in a project. This is the price you pay
+for not getting it perfect from the start, and done is better than perfect.
+
+
+Thanks for reading!
+
+
+
